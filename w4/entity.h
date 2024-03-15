@@ -12,4 +12,3 @@ struct Entity
   float targetX = 0.f;
   float targetY = 0.f;
 };
-

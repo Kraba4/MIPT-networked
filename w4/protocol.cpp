@@ -91,4 +91,3 @@ void deserialize_snapshot(ENetPacket *packet, uint16_t &eid, float &x, float &y)
   x = *(float*)(ptr); ptr += sizeof(float);
   y = *(float*)(ptr); ptr += sizeof(float);
 }
-

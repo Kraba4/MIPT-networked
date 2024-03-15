@@ -2,6 +2,7 @@
 #include <algorithm> // min/max
 #include "raylib.h"
 #include <enet/enet.h>
+#include <stdio.h>
 
 #include <vector>
 #include "entity.h"
@@ -101,6 +102,7 @@ int main(int argc, const char **argv)
         printf("Connection with %x:%u established\n", event.peer->address.host, event.peer->address.port);
         send_join(serverPeer);
         connected = true;
+        enet_packet_destroy(event.packet);
         break;
       case ENET_EVENT_TYPE_RECEIVE:
         switch (get_packet_type(event.packet))
@@ -117,6 +119,7 @@ int main(int argc, const char **argv)
           on_snapshot(event.packet);
           break;
         };
+        enet_packet_destroy(event.packet);
         break;
       default:
         break;

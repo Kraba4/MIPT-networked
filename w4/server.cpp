@@ -37,7 +37,7 @@ void on_join(ENetPacket *packet, ENetPeer *peer, ENetHost *host)
 
 
   // send info about new entity to everyone
-  for (size_t i = 0; i < host->peerCount; ++i)
+  for (size_t i = 0; i < host->connectedPeers; ++i)
     send_new_entity(&host->peers[i], ent);
   // send info about controlled entity
   send_set_controlled_entity(peer, newEid);
@@ -135,7 +135,7 @@ int main(int argc, const char **argv)
     }
     for (const Entity &e : entities)
     {
-      for (size_t i = 0; i < server->peerCount; ++i)
+      for (size_t i = 0; i < server->connectedPeers; ++i)
       {
         ENetPeer *peer = &server->peers[i];
         if (controlledMap[e.eid] != peer)
@@ -150,5 +150,3 @@ int main(int argc, const char **argv)
   atexit(enet_deinitialize);
   return 0;
 }
-
-

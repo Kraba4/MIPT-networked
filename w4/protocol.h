@@ -24,4 +24,3 @@ void deserialize_new_entity(ENetPacket *packet, Entity &ent);
 void deserialize_set_controlled_entity(ENetPacket *packet, uint16_t &eid);
 void deserialize_entity_state(ENetPacket *packet, uint16_t &eid, float &x, float &y);
 void deserialize_snapshot(ENetPacket *packet, uint16_t &eid, float &x, float &y);
-
