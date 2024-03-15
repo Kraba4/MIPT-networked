@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <vector>
 #include <map>
-
+#include <cmath>
 static std::vector<Entity> entities;
 static std::map<uint16_t, ENetPeer*> controlledMap;
 
@@ -84,7 +84,7 @@ int main(int argc, const char **argv)
     entities[eid].serverControlled = true;
     controlledMap[eid] = nullptr;
   }
-
+  uint32_t lastCheck = enet_time_get();
   uint32_t lastTime = enet_time_get();
   while (true)
   {
@@ -143,6 +143,11 @@ int main(int argc, const char **argv)
       }
     }
     //usleep(400000);
+    uint32_t check = enet_time_get();
+    if (check - lastCheck > 1000) {
+      std::cout << server->peers[0].roundTripTime << std::endl;
+      lastCheck = check;
+    }  
   }
 
   enet_host_destroy(server);
