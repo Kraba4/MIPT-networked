@@ -7,7 +7,6 @@
 #include <vector>
 #include "entity.h"
 #include "protocol.h"
-#include <iostream>
 
 static std::vector<Entity> entities;
 static uint16_t my_entity = invalid_entity;
@@ -94,11 +93,8 @@ int main(int argc, const char **argv)
   {
     float dt = GetFrameTime();
     ENetEvent event;
-    int res = enet_host_service(client, &event, 0);
-    // std::cout << res << std::endl;
-    while (res > 0)
+    while (enet_host_service(client, &event, 0) > 0)
     {
-      // std::cout << enet_time_get() << std::endl;
       switch (event.type)
       {
       case ENET_EVENT_TYPE_CONNECT:
@@ -126,9 +122,8 @@ int main(int argc, const char **argv)
       default:
         break;
       };
-      res = enet_host_service(client, &event, 0);
     }
-    // std::cout << res << std::endl;
+
     if (my_entity != invalid_entity)
     {
       bool left = IsKeyDown(KEY_LEFT);
@@ -147,8 +142,7 @@ int main(int argc, const char **argv)
           send_entity_state(serverPeer, my_entity, e.x, e.y);
         }
     }
-
-
+    
     BeginDrawing();
       ClearBackground(GRAY);
       BeginMode2D(camera);

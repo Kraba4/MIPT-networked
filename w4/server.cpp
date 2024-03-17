@@ -84,7 +84,7 @@ int main(int argc, const char **argv)
     entities[eid].serverControlled = true;
     controlledMap[eid] = nullptr;
   }
-  uint32_t lastCheck = enet_time_get();
+
   uint32_t lastTime = enet_time_get();
   while (true)
   {
@@ -92,7 +92,7 @@ int main(int argc, const char **argv)
     float dt = (curTime - lastTime) * 0.001f;
     lastTime = curTime;
     ENetEvent event;
-    while (enet_host_service(server, &event, 0) > 0)
+    while (enet_host_service(server, &event, 1) > 0) // ?if timeout == 0 client sometimes can disconnect
     {
       switch (event.type)
       {
@@ -143,11 +143,6 @@ int main(int argc, const char **argv)
       }
     }
     //usleep(400000);
-    uint32_t check = enet_time_get();
-    if (check - lastCheck > 1000) {
-      std::cout << server->peers[0].roundTripTime << std::endl;
-      lastCheck = check;
-    }  
   }
 
   enet_host_destroy(server);
