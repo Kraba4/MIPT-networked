@@ -3,6 +3,8 @@
 #include "raylib.h"
 #include <enet/enet.h>
 #include <stdio.h>
+#include <string>
+#include <iostream>
 
 #include <vector>
 #include "entity.h"
@@ -10,6 +12,7 @@
 
 static std::vector<Entity> entities;
 static uint16_t my_entity = invalid_entity;
+static std::string scoreListText = "Scores: ";
 
 void on_new_entity_packet(ENetPacket *packet)
 {
@@ -39,6 +42,38 @@ void on_snapshot(ENetPacket *packet)
       e.x = x;
       e.y = y;
     }
+}
+
+void on_change_size(ENetPacket *packet)
+{
+  uint16_t eid = invalid_entity;
+  float radius;
+  deserialize_change_size(packet, eid, radius);
+  // TODO: Direct adressing, of course!
+  for (Entity &e : entities)
+    if (e.eid == eid)
+    {
+      e.radius = radius;
+    }
+}
+
+void on_teleport(ENetPacket *packet)
+{
+  uint16_t eid = invalid_entity;
+  float x, y;
+  deserialize_teleport(packet, eid, x, y);
+  // TODO: Direct adressing, of course!
+  for (Entity &e : entities)
+    if (e.eid == eid)
+    {
+      e.x = x;
+      e.y = y;
+    }
+}
+
+void on_score(ENetPacket *packet)
+{
+  deserialize_score(packet, scoreListText);
 }
 
 int main(int argc, const char **argv)
@@ -88,7 +123,6 @@ int main(int argc, const char **argv)
 
   SetTargetFPS(60);               // Set our game to run at 60 frames-per-second
 
-  bool connected = false;
   while (!WindowShouldClose())
   {
     float dt = GetFrameTime();
@@ -98,9 +132,11 @@ int main(int argc, const char **argv)
       switch (event.type)
       {
       case ENET_EVENT_TYPE_CONNECT:
+        {
         printf("Connection with %x:%u established\n", event.peer->address.host, event.peer->address.port);
-        send_join(serverPeer);
-        connected = true;
+        std::string playerName = argc > 1 ? argv[1] : "-none";
+        send_join(serverPeer, playerName);
+        }
         break;
       case ENET_EVENT_TYPE_RECEIVE:
         switch (get_packet_type(event.packet))
@@ -115,6 +151,15 @@ int main(int argc, const char **argv)
           break;
         case E_SERVER_TO_CLIENT_SNAPSHOT:
           on_snapshot(event.packet);
+          break;
+        case E_SERVER_TO_CLIENT_CHANGE_SIZE:
+          on_change_size(event.packet);
+          break;
+        case E_SERVER_TO_CLIENT_TELEPORT:
+          on_teleport(event.packet);
+          break;
+        case E_SERVER_TO_CLIENT_SCORE:
+          on_score(event.packet);
           break;
         };
         enet_packet_destroy(event.packet);
@@ -142,21 +187,24 @@ int main(int argc, const char **argv)
           send_entity_state(serverPeer, my_entity, e.x, e.y);
         }
     }
-    
+
     BeginDrawing();
       ClearBackground(GRAY);
       BeginMode2D(camera);
         for (const Entity &e : entities)
         {
-          const Rectangle rect = {e.x, e.y, 10.f, 10.f};
-          DrawRectangleRec(rect, GetColor(e.color));
+          // const Rectangle rect = {e.x, e.y, 10.f, 10.f};
+          // DrawRectangleRec(rect, GetColor(e.color));
+          DrawCircle(e.x, e.y, e.radius, GetColor(e.color));
         }
 
       EndMode2D();
+      DrawText(TextFormat(scoreListText.c_str()), 20, 20, 20, WHITE);
     EndDrawing();
   }
 
   CloseWindow();
-
+  enet_host_destroy(client);
+  atexit(enet_deinitialize);
   return 0;
 }

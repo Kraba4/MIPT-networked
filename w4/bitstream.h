@@ -139,6 +139,9 @@ class BitstreamReader {
     }
 
     template<typename T>
+    void readValuesPack(char* position, Skip<T> skip) { }
+
+    template<typename T>
     void readValuesPack(char* position, T& value) {
         value = *reinterpret_cast<T*>(position);
     }

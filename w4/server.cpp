@@ -2,13 +2,21 @@
 #include <iostream>
 #include "entity.h"
 #include "protocol.h"
+#include "player.h"
 #include <stdlib.h>
 #include <vector>
 #include <map>
+#include <unordered_map>
 #include <cmath>
-static std::vector<Entity> entities;
-static std::map<uint16_t, ENetPeer*> controlledMap;
+#include <format>
 
+static std::vector<Entity> entities;
+static std::unordered_map<uint16_t, Player> entityIdToPlayer;
+static  const std::vector<std::string> random_names = 
+        {"Aaren", "Aarika", "Abagael", "Abagail", "Abbe", "Abbey", "Abbi", "Abbie", "Abby", "Abbye", "Abigael", "Abigail",
+        "Abigale", "Abra", "Ada", "Adah", "Adaline", "Adan", "Adara", "Adda", "Addi", "Addia", "Addie",
+        "Addy", "Adel", "Adela", "Adelaida", "Adelaide", "Adele", "Adelheid", "Adelice", "Adelina"};
+static u_int16_t nextAvailableRandomName = 0;
 static uint16_t create_random_entity()
 {
   uint16_t newEid = entities.size();
@@ -18,9 +26,23 @@ static uint16_t create_random_entity()
                    0x00000044 * (1 + rand() % 4);
   float x = (rand() % 40 - 20) * 5.f;
   float y = (rand() % 40 - 20) * 5.f;
-  Entity ent = {color, x, y, newEid, false, 0.f, 0.f};
+  float radius = (rand() % 6) + 5.f;
+  Entity ent = {color, x, y, radius, newEid, false, 0.f, 0.f};
   entities.push_back(ent);
   return newEid;
+}
+
+
+void sendScoreListToAllPeers(ENetHost *server) {
+  std::string scoreListText = "Scores:\n";
+  for (const auto& [eid, player] : entityIdToPlayer) {
+      scoreListText.append(std::format("{} {}\n", player.name, player.score));
+  }
+  for (size_t i = 0; i < server->connectedPeers; ++i)
+  {
+    ENetPeer *peer = &server->peers[i];
+    send_score(peer, scoreListText);
+  }
 }
 
 void on_join(ENetPacket *packet, ENetPeer *peer, ENetHost *host)
@@ -33,8 +55,15 @@ void on_join(ENetPacket *packet, ENetPeer *peer, ENetHost *host)
   uint16_t newEid = create_random_entity();
   const Entity& ent = entities[newEid];
 
-  controlledMap[newEid] = peer;
-
+  std::string name;
+  deserialize_join(packet, name);
+  if (name == "-none") {
+    name = random_names[nextAvailableRandomName];
+    nextAvailableRandomName = (nextAvailableRandomName + 1) % random_names.size();
+  }
+  float score = 0.f;
+  entityIdToPlayer[newEid] = {peer, name, score};
+  sendScoreListToAllPeers(host);
 
   // send info about new entity to everyone
   for (size_t i = 0; i < host->connectedPeers; ++i)
@@ -54,6 +83,47 @@ void on_state(ENetPacket *packet)
       e.x = x;
       e.y = y;
     }
+}
+
+bool isEntitiesCollide(const Entity& e1, const Entity& e2) {
+  float distX = e1.x - e2.x;
+  float distY = e1.y - e2.y;
+  float sumRadii = e1.radius + e2.radius;
+  return distX * distX + distY * distY < sumRadii * sumRadii;  
+}
+
+
+void simulateEat(Entity& whoEat, Entity& whoGetsEaten, ENetHost *server) {
+  float radiusToAdd = whoGetsEaten.radius / 2.f;
+  whoEat.radius += whoEat.radius < 100.f ? radiusToAdd : 100.f - whoEat.radius;
+  whoGetsEaten.radius = (rand() % 6) + 5.f;
+  whoGetsEaten.x = (rand() % 120 - 60) * 5.f;
+  whoGetsEaten.y = (rand() % 120 - 60) * 5.f;
+  for (size_t i = 0; i < server->connectedPeers; ++i)
+  {
+    ENetPeer *peer = &server->peers[i];
+    send_change_size(peer, whoEat.eid, whoEat.radius);
+    send_change_size(peer, whoGetsEaten.eid, whoGetsEaten.radius);
+  }
+  if (entityIdToPlayer.contains(whoGetsEaten.eid)) {
+    send_teleport(entityIdToPlayer[whoGetsEaten.eid].peer, whoGetsEaten.eid, whoGetsEaten.x, whoGetsEaten.y);
+  }
+  if (entityIdToPlayer.contains(whoEat.eid)) {
+    entityIdToPlayer[whoEat.eid].score += radiusToAdd;
+    sendScoreListToAllPeers(server);
+  }
+}
+
+void simulateTryEat(Entity& e1, Entity& e2, ENetHost *server) {
+  if (isEntitiesCollide(e1, e2)) {
+    if (e1.radius > e2.radius) {
+      simulateEat(e1, e2, server);
+    } else if (e1.radius < e2.radius) {
+      simulateEat(e2, e1, server);
+    }
+    // no one will be eaten
+  }
+  // no one will be eaten
 }
 
 int main(int argc, const char **argv)
@@ -82,7 +152,6 @@ int main(int argc, const char **argv)
   {
     uint16_t eid = create_random_entity();
     entities[eid].serverControlled = true;
-    controlledMap[eid] = nullptr;
   }
 
   uint32_t lastTime = enet_time_get();
@@ -92,7 +161,7 @@ int main(int argc, const char **argv)
     float dt = (curTime - lastTime) * 0.001f;
     lastTime = curTime;
     ENetEvent event;
-    while (enet_host_service(server, &event, 1) > 0) // ?if timeout == 0 client sometimes can disconnect
+    while (enet_host_service(server, &event, 1) > 0)
     {
       switch (event.type)
       {
@@ -133,20 +202,32 @@ int main(int argc, const char **argv)
         }
       }
     }
+    for (size_t i = 0; i < entities.size(); ++i) {
+      for (size_t j = i + 1; j < entities.size(); ++j) {
+        simulateTryEat(entities[i], entities[j], server);
+      }
+    }
     for (const Entity &e : entities)
     {
-      for (size_t i = 0; i < server->connectedPeers; ++i)
-      {
-        ENetPeer *peer = &server->peers[i];
-        if (controlledMap[e.eid] != peer)
+      if (entityIdToPlayer.contains(e.eid)) {
+        for (size_t i = 0; i < server->connectedPeers; ++i)
+        {
+          ENetPeer *peer = &server->peers[i];
+          if (entityIdToPlayer[e.eid].peer != peer)
+            send_snapshot(peer, e.eid, e.x, e.y);
+        }
+      } else {
+        for (size_t i = 0; i < server->connectedPeers; ++i)
+        {
+          ENetPeer *peer = &server->peers[i];
           send_snapshot(peer, e.eid, e.x, e.y);
+        }
       }
     }
     //usleep(400000);
   }
 
   enet_host_destroy(server);
-
   atexit(enet_deinitialize);
   return 0;
 }
