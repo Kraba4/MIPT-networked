@@ -102,11 +102,7 @@ class BitstreamReader {
 
     template<typename... Args>
     void read(Args&&... values) {
-        constexpr uint32_t dataSize = (sizeof(Args) + ... + 0);
-        assert(m_currentPos + dataSize <= m_bufferSize);
-
-        readValuesPack(&m_buffer[m_currentPos], values...);
-        m_currentPos += dataSize;
+        readValuesPack(values...);
     }
     
     void readData(char* data, uint32_t dataSize) {
@@ -128,22 +124,31 @@ class BitstreamReader {
 
  private:
     template<typename T, typename... Args>
-    void readValuesPack(char* position, T& value, Args&&... values) {
-        value = *reinterpret_cast<T*>(position);
-        readValuesPack(position + sizeof(T), values...);
+    void readValuesPack(T& value, Args&&... values) {
+        assert(m_currentPos + sizeof(T) <= m_bufferSize);
+        value = *reinterpret_cast<T*>(&m_buffer[m_currentPos]);
+        m_currentPos += sizeof(T);
+        readValuesPack(values...);
     }
 
     template<typename T, typename... Args>
-    void readValuesPack(char* position, Skip<T> skip, Args&&... values) {
-        readValuesPack(position + sizeof(T), values...);
+    void readValuesPack(Skip<T> skip, Args&&... values) {
+        assert(m_currentPos + sizeof(T) <= m_bufferSize);
+        m_currentPos += sizeof(T);
+        readValuesPack(values...);
     }
 
     template<typename T>
-    void readValuesPack(char* position, Skip<T> skip) { }
+    void readValuesPack(Skip<T> skip) { 
+        assert(m_currentPos + sizeof(T) <= m_bufferSize);
+        m_currentPos += sizeof(T); 
+    }
 
     template<typename T>
-    void readValuesPack(char* position, T& value) {
-        value = *reinterpret_cast<T*>(position);
+    void readValuesPack(T& value) {
+        assert(m_currentPos + sizeof(T) <= m_bufferSize);
+        value = *reinterpret_cast<T*>(&m_buffer[m_currentPos]);
+        m_currentPos += sizeof(T);
     }
 
     char* m_buffer;
