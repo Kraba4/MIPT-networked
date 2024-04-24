@@ -34,10 +34,11 @@ void on_join(ENetPacket *packet, ENetPeer *peer, ENetHost *host)
 
 
   // send info about new entity to everyone
-  for (size_t i = 0; i < host->peerCount; ++i)
+  for (size_t i = 0; i < host->connectedPeers; ++i)
     send_new_entity(&host->peers[i], ent);
   // send info about controlled entity
   send_set_controlled_entity(peer, newEid);
+  send_set_time(peer, enet_time_get());
 }
 
 void on_input(ENetPacket *packet)
@@ -74,6 +75,7 @@ int main(int argc, const char **argv)
   }
 
   uint32_t lastTime = enet_time_get();
+  uint32_t lastTimeSendSnapshots = enet_time_get();
   while (true)
   {
     uint32_t curTime = enet_time_get();
@@ -104,20 +106,26 @@ int main(int argc, const char **argv)
       };
     }
     static int t = 0;
+
     for (Entity &e : entities)
     {
-      // simulate
       simulate_entity(e, dt);
-      // send
-      for (size_t i = 0; i < server->peerCount; ++i)
-      {
-        ENetPeer *peer = &server->peers[i];
-        // skip this here in this implementation
-        //if (controlledMap[e.eid] != peer)
-        send_snapshot(peer, e.eid, e.x, e.y, e.ori);
-      }
     }
-    usleep(100000);
+    if (curTime - lastTimeSendSnapshots >= 100) {
+      for (Entity &e : entities)
+      {
+        // send
+        for (size_t i = 0; i < server->connectedPeers; ++i)
+        {
+          ENetPeer *peer = &server->peers[i];
+          // skip this here in this implementation
+          //if (controlledMap[e.eid] != peer)
+          send_snapshot(peer, e.eid, e.x, e.y, e.ori, enet_time_get());
+        }
+      }
+      lastTimeSendSnapshots = curTime;
+    }
+    // usleep(100000);
   }
 
   enet_host_destroy(server);

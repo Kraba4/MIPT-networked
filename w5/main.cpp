@@ -4,24 +4,28 @@
 #include "raylib.h"
 #include <enet/enet.h>
 #include <math.h>
-
+#include <stdio.h>
 #include <vector>
 #include "entity.h"
 #include "protocol.h"
-
+#include <iostream>
+#include "mathUtils.h"
 
 static std::vector<Entity> entities;
+static std::vector<Entity> entitiesInFuture;
+static std::unordered_map<uint16_t, size_t> eidToIndexInVectorMap;
 static uint16_t my_entity = invalid_entity;
 
 void on_new_entity_packet(ENetPacket *packet)
 {
   Entity newEntity;
   deserialize_new_entity(packet, newEntity);
-  // TODO: Direct adressing, of course!
-  for (const Entity &e : entities)
-    if (e.eid == newEntity.eid)
-      return; // don't need to do anything, we already have entity
+  if (eidToIndexInVectorMap.contains(newEntity.eid)) {
+    return; // don't need to do anything, we already have entity
+  }
+  eidToIndexInVectorMap[newEntity.eid] = entities.size();
   entities.push_back(newEntity);
+  entitiesInFuture.push_back(newEntity);
 }
 
 void on_set_controlled_entity(ENetPacket *packet)
@@ -32,16 +36,35 @@ void on_set_controlled_entity(ENetPacket *packet)
 void on_snapshot(ENetPacket *packet)
 {
   uint16_t eid = invalid_entity;
-  float x = 0.f; float y = 0.f; float ori = 0.f;
-  deserialize_snapshot(packet, eid, x, y, ori);
-  // TODO: Direct adressing, of course!
-  for (Entity &e : entities)
-    if (e.eid == eid)
-    {
-      e.x = x;
-      e.y = y;
-      e.ori = ori;
-    }
+  float x = 0.f; float y = 0.f; float ori = 0.f; uint32_t time;
+  deserialize_snapshot(packet, eid, x, y, ori, time);
+  Entity &eInFuture = entitiesInFuture[eidToIndexInVectorMap[eid]];
+  eInFuture.x = x;
+  eInFuture.y = y;
+  eInFuture.ori = ori;
+  eInFuture.lastUpdateTime = time;
+}
+
+void on_set_time(ENetPacket *packet)
+{
+  uint32_t newTime;
+  deserialize_set_time(packet, newTime);
+  enet_time_set(newTime);
+}
+
+void simulateByInterpolation(size_t entityIndexInVector, uint32_t simulateTime)
+{
+  Entity &e = entities[entityIndexInVector];
+  Entity &eInFuture = entitiesInFuture[entityIndexInVector];
+  if (eInFuture.lastUpdateTime == e.lastUpdateTime) {
+    std::cout << "error" << simulateTime << std::endl;
+    return;
+  }
+  float t = clamp(float(simulateTime - e.lastUpdateTime) / (eInFuture.lastUpdateTime - e.lastUpdateTime), 0, 1);
+  e.x   = lerp(e.x, eInFuture.x, t);
+  e.y   = lerp(e.y, eInFuture.y, t);
+  e.ori = lerp(e.ori, eInFuture.ori, t);
+  e.lastUpdateTime = simulateTime;
 }
 
 int main(int argc, const char **argv)
@@ -119,7 +142,11 @@ int main(int argc, const char **argv)
         case E_SERVER_TO_CLIENT_SNAPSHOT:
           on_snapshot(event.packet);
           break;
+        case E_SERVER_TO_CLIEN_SET_TIME:
+          on_set_time(event.packet);
+          break;
         };
+        enet_packet_destroy(event.packet);
         break;
       default:
         break;
@@ -131,19 +158,19 @@ int main(int argc, const char **argv)
       bool right = IsKeyDown(KEY_RIGHT);
       bool up = IsKeyDown(KEY_UP);
       bool down = IsKeyDown(KEY_DOWN);
-      // TODO: Direct adressing, of course!
-      for (Entity &e : entities)
-        if (e.eid == my_entity)
-        {
-          // Update
-          float thr = (up ? 1.f : 0.f) + (down ? -1.f : 0.f);
-          float steer = (left ? -1.f : 0.f) + (right ? 1.f : 0.f);
+      Entity &e = entities[eidToIndexInVectorMap[my_entity]];
 
-          // Send
-          send_entity_input(serverPeer, my_entity, thr, steer);
-        }
+      // Update
+      float thr = (up ? 1.f : 0.f) + (down ? -1.f : 0.f);
+      float steer = (left ? -1.f : 0.f) + (right ? 1.f : 0.f);
+
+      // Send
+      send_entity_input(serverPeer, my_entity, thr, steer);
     }
-
+    uint32_t curTime = enet_time_get();
+    for (size_t i = 0; i < entities.size(); ++i) {
+      simulateByInterpolation(i, curTime - 100);
+    }
     BeginDrawing();
       ClearBackground(GRAY);
       BeginMode2D(camera);
