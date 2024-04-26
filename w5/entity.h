@@ -13,9 +13,11 @@ struct Entity
   float thr = 0.f;
   float steer = 0.f;
 
+  uint32_t tick = 0;
+  
   uint16_t eid = invalid_entity;
-  uint32_t lastUpdateTime = 0;
 };
 
 void simulate_entity(Entity &e, float dt);
 
+void simulate_entity_cheat(Entity &e, float dt);
