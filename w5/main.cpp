@@ -129,7 +129,7 @@ void setCorrectLocalHistoryInterval(uint32_t simulateTime)
   const int simulateTimeTick = (simulateTime / fixedDt) + 1;
   const int positionInVector = simulateTimeTick - startTick - nDeleted;
   if (positionInVector - 2 >= 0) {
-    entitiesInPast[my_entity] = localHistory[positionInVector - 2];
+    entitiesInPrevPast[my_entity] = localHistory[positionInVector - 2];
   }
   entitiesInPast[my_entity] = localHistory[positionInVector - 1];
   entitiesInFuture[my_entity] = localHistory[positionInVector];
