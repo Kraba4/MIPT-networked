@@ -126,8 +126,11 @@ void interpolateEntity(size_t entityIndexInVector, uint32_t simulateTime)
 
 void setCorrectLocalHistoryInterval(uint32_t simulateTime) 
 {
-  const size_t simulateTimeTick = (simulateTime / fixedDt) + 1;
-  const size_t positionInVector = simulateTimeTick - startTick - nDeleted;
+  const int simulateTimeTick = (simulateTime / fixedDt) + 1;
+  const int positionInVector = simulateTimeTick - startTick - nDeleted;
+  if (positionInVector - 2 >= 0) {
+    entitiesInPast[my_entity] = localHistory[positionInVector - 2];
+  }
   entitiesInPast[my_entity] = localHistory[positionInVector - 1];
   entitiesInFuture[my_entity] = localHistory[positionInVector];
 }
