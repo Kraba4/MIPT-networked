@@ -2,6 +2,7 @@
 #include "quantisation.h"
 #include <cstring> // memcpy
 #include <iostream>
+#include "bitstream.h"
 
 void send_join(ENetPeer *peer)
 {
@@ -58,22 +59,24 @@ typedef PackedFloat<uint16_t, 10> PositionYQuantized;
 
 void send_snapshot(ENetPeer *peer, uint16_t eid, float x, float y, float ori)
 {
-  ENetPacket *packet = enet_packet_create(nullptr, sizeof(uint8_t) + sizeof(uint16_t) +
-                                                   sizeof(uint16_t) +
-                                                   sizeof(uint16_t) +
-                                                   sizeof(uint8_t),
-                                                   ENET_PACKET_FLAG_UNSEQUENCED);
-  uint8_t *ptr = packet->data;
-  *ptr = E_SERVER_TO_CLIENT_SNAPSHOT; ptr += sizeof(uint8_t);
-  memcpy(ptr, &eid, sizeof(uint16_t)); ptr += sizeof(uint16_t);
-  PositionXQuantized xPacked(x, -16, 16);
-  PositionYQuantized yPacked(y, -8, 8);
-  uint8_t oriPacked = pack_float<uint8_t>(ori, -PI, PI, 8);
-  //printf("xPacked/unpacked %d %f\n", xPacked, x);
-  memcpy(ptr, &xPacked.packedVal, sizeof(uint16_t)); ptr += sizeof(uint16_t);
-  memcpy(ptr, &yPacked.packedVal, sizeof(uint16_t)); ptr += sizeof(uint16_t);
-  memcpy(ptr, &oriPacked, sizeof(uint8_t)); ptr += sizeof(uint8_t);
+  BitstreamWriter bs;
+  bs.write(E_SERVER_TO_CLIENT_SNAPSHOT, eid);
+  
+  {
+    PackedVec3<uint32_t, 11, 10, 8> xYoriPacked(x, {-16, 16}, y, {-8, 8}, ori, {-PI, PI});
+    bs.write(xYoriPacked.packedVal);
+  }
 
+  // {
+  //   PositionXQuantized xPacked(x, -16, 16);
+  //   PositionYQuantized yPacked(y, -8, 8);
+  //   uint8_t oriPacked = pack_float<uint8_t>(ori, -PI, PI, 8);
+  //   bs.writePackedUint32(xPacked.packedVal);
+  //   bs.writePackedUint32(yPacked.packedVal);
+  //   bs.write(oriPacked);
+  // }
+
+  ENetPacket *packet = enet_packet_create(bs.data(), bs.size(), ENET_PACKET_FLAG_UNSEQUENCED);
   enet_peer_send(peer, 1, packet);
 }
 
@@ -111,17 +114,38 @@ void deserialize_entity_input(ENetPacket *packet, uint16_t &eid, float &thr, flo
   steer = steerPacked.packedVal == neutralPackedValue ? 0.f : steerPacked.unpack(-1.f, 1.f);
 }
 
+template<typename T>
+using Skip = BitstreamReader::Skip<T>;
+
+
 void deserialize_snapshot(ENetPacket *packet, uint16_t &eid, float &x, float &y, float &ori)
 {
-  uint8_t *ptr = packet->data; ptr += sizeof(uint8_t);
-  eid = *(uint16_t*)(ptr); ptr += sizeof(uint16_t);
-  uint16_t xPacked = *(uint16_t*)(ptr); ptr += sizeof(uint16_t);
-  uint16_t yPacked = *(uint16_t*)(ptr); ptr += sizeof(uint16_t);
-  PositionXQuantized xPackedVal(xPacked);
-  PositionYQuantized yPackedVal(yPacked);
-  uint8_t oriPacked = *(uint8_t*)(ptr); ptr += sizeof(uint8_t);
-  x = xPackedVal.unpack(-16, 16);
-  y = yPackedVal.unpack(-8, 8);
-  ori = unpack_float<uint8_t>(oriPacked, -PI, PI, 8);
+  BitstreamReader bs(reinterpret_cast<char*>(packet->data), packet->dataLength);
+  bs.read(Skip<MessageType>(), eid);
+
+  {
+    uint32_t xYoriPacked;
+    bs.read(xYoriPacked);
+
+    PackedVec3<uint32_t, 11, 10, 8> xYoriPackedVal(xYoriPacked);
+    auto [xVal, yVal, oriVal] = xYoriPackedVal.unpack({-16, 16}, {-8, 8}, {-PI, PI});
+    x = xVal; y = yVal; ori = oriVal;
+  }
+
+  // {
+  //   uint32_t xPacked, yPacked;
+  //   bs.readPackedUint32(xPacked);
+  //   bs.readPackedUint32(yPacked);
+  //   PositionXQuantized xPackedVal(xPacked);
+  //   PositionYQuantized yPackedVal(yPacked);
+
+  //   uint8_t oriPacked;
+  //   bs.read(oriPacked);
+
+  //   x = xPackedVal.unpack(-16, 16);
+  //   y = yPackedVal.unpack(-8, 8);
+  //   ori = unpack_float<uint8_t>(oriPacked, -PI, PI, 8);
+  // }
+  // std::cout << packet->dataLength << std::endl;
 }
 

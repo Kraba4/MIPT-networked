@@ -4,6 +4,7 @@
 #include "raylib.h"
 #include <enet/enet.h>
 #include <math.h>
+#include <stdio.h>
 
 #include <vector>
 #include "entity.h"
