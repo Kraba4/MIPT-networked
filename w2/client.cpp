@@ -25,7 +25,7 @@ class Client {
     if (!m_lobbyPeer)
     {
       printf("Cannot to lobby");
-      exit(1);
+      exit(2);
     }
   }
 
