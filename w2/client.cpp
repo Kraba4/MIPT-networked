@@ -24,7 +24,7 @@ class Client {
     m_lobbyPeer = enet_host_connect(m_client, &address, 2, 0);
     if (!m_lobbyPeer)
     {
-      printf("Cannot connect to lobby");
+      printf("Cannot to lobby");
       exit(1);
     }
   }
